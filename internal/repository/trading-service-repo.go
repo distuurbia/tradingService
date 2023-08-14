@@ -50,3 +50,13 @@ func (r *TradingServiceRepository) ClosePosition(ctx context.Context, positionID
 	}
 	return nil
 }
+
+// ReadShareNameByID reads from db name of share using by exact position
+func (r *TradingServiceRepository) ReadShareNameByID(ctx context.Context, positionID uuid.UUID) (string, error) {
+	var shareName string
+	err := r.pool.QueryRow(ctx, "SELECT shareName FROM positions WHERE positionID = $1", positionID).Scan(&shareName)
+	if err != nil {
+		return "", fmt.Errorf("TradingServiceRepository -> ReadShareNameByID -> %w", err)
+	}
+	return shareName, nil
+}

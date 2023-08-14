@@ -9,19 +9,19 @@ import (
 
 // Share is a struct for shares entity
 type Share struct {
-	Name  string
 	Price float64
+	Name  string
 }
 
 // Position contains all info abount position, its name its ID, ID of profile opened this position vector, money and its borders
 type Position struct {
-	MoneyAmount float64
+	MoneyAmount float64 `validate:"gt=0"`
+	StopLoss    float64 `validate:"gt=0"`
+	TakeProfit  float64 `validate:"gt=0"`
 	ProfileID   uuid.UUID
 	PositionID  uuid.UUID
-	ShareName   string
-	StopLoss    float64
-	TakeProfit  float64
-	Vector      string
+	ShareName   string `validate:"required,min=1"`
+	Vector      string `validate:"oneof=long short"`
 }
 
 // ProfilesManager is an assistent for managing all opened positions by profiles

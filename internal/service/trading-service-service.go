@@ -27,6 +27,7 @@ type PriceServiceRepository interface {
 type TradingServiceRepository interface {
 	AddPosition(ctx context.Context, position *model.Position, shareStartPrice float64) error
 	ClosePosition(ctx context.Context, positionID uuid.UUID, shareEndPrice float64) error
+	ReadShareNameByID(ctx context.Context, positionID uuid.UUID) (string, error)
 }
 
 // TradingServiceService is the struct that implements PriceServiceRepository and TradingServiceRepository interfaces,
@@ -64,9 +65,14 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context) {
 			go s.priceRps.Subscribe(ctx, uuid.New(), allShares, errSubscribe)
 			isAnyProfiles = true
 		}
+		if len(s.profMngr.Profiles) == 0 && isAnyProfiles {
+			isAnyProfiles = false
+			ctx.Done()
+			continue
+		}
 		err := <-errSubscribe
 		if err != nil {
-			logrus.Fatalf("TradingServiceService -> SendSharesToProfiles -> %v", err)
+			logrus.Infof("TradingServiceService -> SendSharesToProfiles -> %v", err)
 		}
 		shares := <-allShares
 		for subID, selcetedShares := range s.profMngr.Profiles {
@@ -92,8 +98,6 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context) {
 func (s *TradingServiceService) AddInfoToManager(profileID uuid.UUID, selectedShare string) {
 	selectedShares := make([]string, 0)
 	const msgs = 1
-	s.profMngr.Mu.Lock()
-	defer s.profMngr.Mu.Unlock()
 
 	if _, ok := s.profMngr.Profiles[profileID]; !ok {
 		selectedShares = append(selectedShares, selectedShare)
@@ -126,6 +130,7 @@ func (s *TradingServiceService) DeleteProfileAtAll(profileID uuid.UUID) {
 		delete(s.profMngr.Profiles, profileID)
 		close(s.profMngr.ProfilesShares[profileID])
 		delete(s.profMngr.ProfilesShares, profileID)
+		delete(s.profMngr.SharesPositionsRead, profileID)
 	}
 }
 
@@ -147,16 +152,18 @@ func (s *TradingServiceService) CountPnl(vector string, shareAmount, shareStartP
 
 // ClosePosition closes exact position and deletes everything related from all included structures in ProfileManager,
 // if profile don't have any opened positions, calls DeleteProfileAtAll method
-func (s *TradingServiceService) ClosePosition(ctx context.Context, profileID, positionID uuid.UUID, selectedShare string) error {
+func (s *TradingServiceService) ClosePosition(ctx context.Context, profileID, positionID uuid.UUID) error {
 	_, ok := s.profMngr.Profiles[profileID]
 	_, secOk := s.profMngr.SharesPositionsRead[profileID]
 	if !ok && secOk {
 		return fmt.Errorf("TradingServiceService -> ClosePosition -> error: position with such ID doesn't exist")
 	}
 	var shareEndPrice float64
-	s.profMngr.Mu.RLock()
 	shares := <-s.profMngr.ProfilesShares[profileID]
-	s.profMngr.Mu.RUnlock()
+	selectedShare, err := s.tradingRps.ReadShareNameByID(ctx, positionID)
+	if err != nil {
+		return fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
+	}
 	for _, share := range shares {
 		if share.Name == selectedShare {
 			shareEndPrice = share.Price
@@ -173,7 +180,7 @@ func (s *TradingServiceService) ClosePosition(ctx context.Context, profileID, po
 		}
 	}
 
-	err := s.tradingRps.ClosePosition(ctx, positionID, shareEndPrice)
+	err = s.tradingRps.ClosePosition(ctx, positionID, shareEndPrice)
 	if err != nil {
 		return fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
 	}
@@ -184,9 +191,7 @@ func (s *TradingServiceService) ClosePosition(ctx context.Context, profileID, po
 // CheckStopLossAndTakeProfit called in goroutine with fill the given channel when position woult be at StopLoss or TakeProfit
 func (s *TradingServiceService) CheckStopLossAndTakeProfit(position *model.Position, outOfPosition chan bool) {
 	for {
-		s.profMngr.Mu.RLock()
 		shares := <-s.profMngr.ProfilesShares[position.ProfileID]
-		s.profMngr.Mu.RUnlock()
 		for _, share := range shares {
 			switch position.Vector {
 			case long:
@@ -206,9 +211,7 @@ func (s *TradingServiceService) CheckStopLossAndTakeProfit(position *model.Posit
 
 // OpenPosition calls method AddPosition from TradingServiceRepository and wait till the end of position to return the its pnl
 func (s *TradingServiceService) OpenPosition(ctx context.Context, position *model.Position) (float64, error) {
-	s.profMngr.Mu.RLock()
 	shares := <-s.profMngr.ProfilesShares[position.ProfileID]
-	s.profMngr.Mu.RUnlock()
 	var shareStartPrice float64
 	var shareAmount float64
 	var pnl float64
@@ -234,9 +237,7 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 	case <-s.profMngr.PositionClose[position.PositionID]:
 		close(s.profMngr.PositionClose[position.PositionID])
 		delete(s.profMngr.PositionClose, position.PositionID)
-		s.profMngr.Mu.RLock()
 		shares := <-s.profMngr.ProfilesShares[position.ProfileID]
-		s.profMngr.Mu.RUnlock()
 		if len(s.profMngr.SharesPositionsRead[position.ProfileID]) == 0 {
 			s.DeleteProfileAtAll(position.ProfileID)
 		}
@@ -247,15 +248,13 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 			}
 		}
 	case <-outOfPosition:
-		s.profMngr.Mu.RLock()
 		shares := <-s.profMngr.ProfilesShares[position.ProfileID]
-		s.profMngr.Mu.RUnlock()
 		for _, share := range shares {
 			if share.Name == position.ShareName {
 				pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, share.Price)
 			}
 		}
-		err := s.ClosePosition(ctx, position.ProfileID, position.PositionID, position.ShareName)
+		err := s.ClosePosition(ctx, position.ProfileID, position.PositionID)
 		if err != nil {
 			return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
 		}

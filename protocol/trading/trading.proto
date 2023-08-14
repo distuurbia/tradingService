@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option go_package = "github.com/distuurbia/tradingService/protocol/trading";
+
+service TradingServiceService {
+    rpc OpenPosition(OpenPositionRequest) returns (OpenPositionResponse) {}
+    rpc ClosePosition(ClosePositionRequest) returns (ClosePositionResponse) {}
+    rpc CheckTradableShares(CheckTradableSharesRequest) returns (CheckTradableSharesResponse) {}
+}
+
+message Position {
+    double moneyAmount = 1;
+    double stopLoss = 2;
+    double takeProfit = 3;
+    string profileID = 4;
+    string positionID = 5;
+    string vector = 6;
+    string shareName = 7;
+}
+
+message OpenPositionRequest {
+    Position position = 1;
+}
+message OpenPositionResponse {
+    double pnl = 1;
+}
+
+message ClosePositionRequest {
+    string profileID = 1;
+    string positionID = 2;
+}
+message ClosePositionResponse {}
+
+message CheckTradableSharesResponse {
+    string tradableShares = 1;
+}
+
+message CheckTradableSharesRequest {}

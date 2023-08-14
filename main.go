@@ -4,14 +4,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/caarlos0/env"
 	priceProtocol "github.com/distuurbia/PriceService/protocol/price"
 	"github.com/distuurbia/tradingService/internal/config"
-	"github.com/distuurbia/tradingService/internal/model"
+	"github.com/distuurbia/tradingService/internal/handler"
+	protocol "github.com/distuurbia/tradingService/protocol/trading"
+	"github.com/go-playground/validator"
+
 	"github.com/distuurbia/tradingService/internal/repository"
 	"github.com/distuurbia/tradingService/internal/service"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -59,32 +62,27 @@ func main() {
 		logrus.Fatalf("main -> %v", errPgx)
 	}
 
-	tradingRps := repository.NewTradingServiceRepository(pool)
 	client := priceProtocol.NewPriceServiceServiceClient(priceServiceConn)
-	priceRps := repository.NewPriceServiceRepository(client)
+
+	tradingRps := repository.NewTradingServiceRepository(pool)
+	priceRps := repository.NewPriceServiceRepository(client, &cfg)
+
 	s := service.NewTradingServiceService(priceRps, tradingRps)
-	testProfileID := uuid.New()
-	testPositionID := uuid.New()
+
+	validate := validator.New()
+	h := handler.NewTradingServiceHandler(s, validate, &cfg)
+
 	go s.SendSharesToProfiles(context.Background())
-	s.AddInfoToManager(testProfileID, "Coca-Cola")
+
+	lis, err := net.Listen("tcp", "localhost:8086")
 	if err != nil {
-		logrus.Errorf("main -> : %v", err)
+		logrus.Fatalf("main -> %v", err)
 	}
-	// go func() {
-	// 	time.Sleep(2 *time.Second)
-	// 	s.ClosePosition(context.Background(), testProfileID, testPositionID, "Coca-Cola")
-	// }()
-	amount, err := s.OpenPosition(context.Background(), &model.Position{
-		ProfileID:   testProfileID,
-		PositionID:  testPositionID,
-		ShareName:   "Coca-Cola",
-		MoneyAmount: 5000,
-		TakeProfit:  125,
-		StopLoss:    120,
-		Vector:      "long",
-	})
+
+	serverRegistrar := grpc.NewServer()
+	protocol.RegisterTradingServiceServiceServer(serverRegistrar, h)
+	err = serverRegistrar.Serve(lis)
 	if err != nil {
-		logrus.Errorf("main -> : %v", err)
+		logrus.Fatalf("main -> %v", err)
 	}
-	fmt.Println(amount)
 }
