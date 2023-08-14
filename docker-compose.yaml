@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  postgres-positions:
+    image: postgres
+    environment:
+      POSTGRES_DB: "positionsDB"
+      POSTGRES_USER: "postgresql"
+      POSTGRES_PASSWORD: "postgresql"
+    ports:
+      - 5435:5432
