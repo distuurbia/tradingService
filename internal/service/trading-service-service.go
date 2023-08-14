@@ -23,6 +23,12 @@ type PriceServiceRepository interface {
 	Subscribe(ctx context.Context, subID uuid.UUID, subscribersShares chan []*model.Share, errSubscribe chan error)
 }
 
+// BalanceRepository is an interface of repository BalanceRepository
+type BalanceRepository interface {
+	WithdrawOnPosition(ctx context.Context, profileID string, amount float64) error
+	MoneyBackWithPnl(ctx context.Context, profileID string, pnl float64) error
+}
+
 // TradingServiceRepository is an interface of repository TradingServiceRepository
 type TradingServiceRepository interface {
 	AddPosition(ctx context.Context, position *model.Position, shareStartPrice float64) error
@@ -34,14 +40,16 @@ type TradingServiceRepository interface {
 // also contains the object of *model.ProfilesManager
 type TradingServiceService struct {
 	priceRps   PriceServiceRepository
+	balanceRps BalanceRepository
 	tradingRps TradingServiceRepository
 	profMngr   *model.ProfilesManager
 }
 
 // NewTradingServiceService is the constructor of TradingServiceService struct
-func NewTradingServiceService(priceRps PriceServiceRepository, tradingRps TradingServiceRepository) *TradingServiceService {
+func NewTradingServiceService(priceRps PriceServiceRepository, balanceRps BalanceRepository, tradingRps TradingServiceRepository) *TradingServiceService {
 	return &TradingServiceService{
 		priceRps:   priceRps,
+		balanceRps: balanceRps,
 		tradingRps: tradingRps,
 		profMngr: &model.ProfilesManager{
 			ProfilesShares:      make(map[uuid.UUID]chan []*model.Share),
@@ -95,7 +103,11 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context) {
 }
 
 // AddInfoToManager adds new profile to profMngr and if profile already exists just adds new selected share and increments SharesPositionsRead by profileID
-func (s *TradingServiceService) AddInfoToManager(profileID uuid.UUID, selectedShare string) {
+func (s *TradingServiceService) AddInfoToManager(ctx context.Context, profileID uuid.UUID, selectedShare string, amount float64) error {
+	err := s.balanceRps.WithdrawOnPosition(ctx, profileID.String(), amount)
+	if err != nil {
+		return fmt.Errorf("TradingServiceService -> AddInfoToManager -> %w", err)
+	}
 	selectedShares := make([]string, 0)
 	const msgs = 1
 
@@ -120,6 +132,7 @@ func (s *TradingServiceService) AddInfoToManager(profileID uuid.UUID, selectedSh
 		s.profMngr.SharesPositionsRead[profileID] = make(map[string]int)
 	}
 	s.profMngr.SharesPositionsRead[profileID][selectedShare]++
+	return nil
 }
 
 // DeleteProfileAtAll deletes profile from Profiles map and ProfilesShares in ProfileManager by profileID
@@ -214,6 +227,7 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 	shares := <-s.profMngr.ProfilesShares[position.ProfileID]
 	var shareStartPrice float64
 	var shareAmount float64
+	moneyAmountDecimal := decimal.NewFromFloat(position.MoneyAmount)
 	var pnl float64
 	for _, share := range shares {
 		if share.Name != position.ShareName {
@@ -221,8 +235,7 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 		}
 		shareStartPrice = share.Price
 		shareStartPriceDecimal := decimal.NewFromFloat(shareStartPrice)
-		amountMoneyDecimal := decimal.NewFromFloat(position.MoneyAmount)
-		shareAmount = amountMoneyDecimal.Div(shareStartPriceDecimal).InexactFloat64()
+		shareAmount = moneyAmountDecimal.Div(shareStartPriceDecimal).InexactFloat64()
 		err := s.tradingRps.AddPosition(ctx, position, shareStartPrice)
 		if err != nil {
 			return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
@@ -242,10 +255,18 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 			s.DeleteProfileAtAll(position.ProfileID)
 		}
 		for _, share := range shares {
-			if share.Name == position.ShareName {
-				pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, share.Price)
-				return pnl, nil
+			if share.Name != position.ShareName {
+				continue
 			}
+			pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, share.Price)
+
+			pnlDecimal := decimal.NewFromFloat(pnl)
+			moneyBack := pnlDecimal.Add(moneyAmountDecimal)
+			err := s.balanceRps.MoneyBackWithPnl(ctx, position.ProfileID.String(), moneyBack.InexactFloat64())
+			if err != nil {
+				return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
+			}
+			return pnl, nil
 		}
 	case <-outOfPosition:
 		shares := <-s.profMngr.ProfilesShares[position.ProfileID]
@@ -263,6 +284,12 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 		}
 		close(s.profMngr.PositionClose[position.PositionID])
 		delete(s.profMngr.PositionClose, position.PositionID)
+		pnlDecimal := decimal.NewFromFloat(pnl)
+		moneyBack := pnlDecimal.Add(moneyAmountDecimal)
+		err = s.balanceRps.MoneyBackWithPnl(ctx, position.ProfileID.String(), moneyBack.InexactFloat64())
+		if err != nil {
+			return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
+		}
 		return pnl, nil
 	}
 	return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> error: failed to return pnl")

@@ -16,7 +16,7 @@ import (
 
 // TradingServiceService is an interface of service TradingServiceService
 type TradingServiceService interface {
-	AddInfoToManager(profileID uuid.UUID, selectedShare string)
+	AddInfoToManager(ctx context.Context, profileID uuid.UUID, selectedShare string, amount float64) error
 	OpenPosition(ctx context.Context, position *model.Position) (float64, error)
 	ClosePosition(ctx context.Context, profileID, positionID uuid.UUID) error
 }
@@ -87,7 +87,11 @@ func (h *TradingServiceHandler) OpenPosition(ctx context.Context, req *protocol.
 		return &protocol.OpenPositionResponse{}, fmt.Errorf("TradingServiceHandler -> OpenPosition -> error: such share doesn't exist")
 	}
 
-	h.s.AddInfoToManager(position.ProfileID, position.ShareName)
+	err = h.s.AddInfoToManager(ctx, position.ProfileID, position.ShareName, position.MoneyAmount)
+	if err != nil {
+		logrus.Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
+		return &protocol.OpenPositionResponse{}, err
+	}
 
 	pnl, err := h.s.OpenPosition(ctx, &position)
 	if err != nil {

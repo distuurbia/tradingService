@@ -8,6 +8,7 @@ import (
 
 	"github.com/caarlos0/env"
 	priceProtocol "github.com/distuurbia/PriceService/protocol/price"
+	balanceProtocol "github.com/distuurbia/balance/protocol/balance"
 	"github.com/distuurbia/tradingService/internal/config"
 	"github.com/distuurbia/tradingService/internal/handler"
 	protocol "github.com/distuurbia/tradingService/protocol/trading"
@@ -21,8 +22,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func createPriceServicelientConnection() (*grpc.ClientConn, error) {
+func createPriceServiceClientConnection() (*grpc.ClientConn, error) {
 	conn, err := grpc.Dial("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func createBalanceClientConnection() (*grpc.ClientConn, error) {
+	conn, err := grpc.Dial("localhost:8082", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
@@ -42,12 +51,23 @@ func connectPostgres(cfg *config.Config) (*pgxpool.Pool, error) {
 }
 
 func main() {
-	priceServiceConn, err := createPriceServicelientConnection()
+	priceServiceConn, err := createPriceServiceClientConnection()
 	if err != nil {
 		logrus.Errorf("main -> : %v", err)
 	}
 	defer func() {
 		errConnClose := priceServiceConn.Close()
+		if errConnClose != nil {
+			logrus.Fatalf("main -> : %v", errConnClose)
+		}
+	}()
+
+	balanceConn, err := createBalanceClientConnection()
+	if err != nil {
+		logrus.Errorf("main -> : %v", err)
+	}
+	defer func() {
+		errConnClose := balanceConn.Close()
 		if errConnClose != nil {
 			logrus.Fatalf("main -> : %v", errConnClose)
 		}
@@ -62,12 +82,14 @@ func main() {
 		logrus.Fatalf("main -> %v", errPgx)
 	}
 
-	client := priceProtocol.NewPriceServiceServiceClient(priceServiceConn)
+	priceServiceClient := priceProtocol.NewPriceServiceServiceClient(priceServiceConn)
+	balanceClient := balanceProtocol.NewBalanceServiceClient(balanceConn)
 
 	tradingRps := repository.NewTradingServiceRepository(pool)
-	priceRps := repository.NewPriceServiceRepository(client, &cfg)
+	priceRps := repository.NewPriceServiceRepository(priceServiceClient, &cfg)
+	balanceRps := repository.NewBalanceRepository(balanceClient)
 
-	s := service.NewTradingServiceService(priceRps, tradingRps)
+	s := service.NewTradingServiceService(priceRps, balanceRps, tradingRps)
 
 	validate := validator.New()
 	h := handler.NewTradingServiceHandler(s, validate, &cfg)
