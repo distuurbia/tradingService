@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/caarlos0/env"
 	priceProtocol "github.com/distuurbia/PriceService/protocol/price"
@@ -94,7 +95,9 @@ func main() {
 	validate := validator.New()
 	h := handler.NewTradingServiceHandler(s, validate, &cfg)
 
-	go s.SendSharesToProfiles(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.SendSharesToProfiles(ctx, len(strings.Split(cfg.TradingServiceShares, ",")))
 
 	lis, err := net.Listen("tcp", "localhost:8086")
 	if err != nil {

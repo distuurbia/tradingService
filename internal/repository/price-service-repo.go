@@ -24,30 +24,29 @@ func NewPriceServiceRepository(client priceProtocol.PriceServiceServiceClient, c
 }
 
 // Subscribe receive data from grpc stream and fills the given channel
-func (r *PriceServiceRepository) Subscribe(ctx context.Context, subID uuid.UUID, subscribersShares chan []*model.Share, errSubscribe chan error) {
+func (r *PriceServiceRepository) Subscribe(ctx context.Context, subID uuid.UUID, subscribersShares chan model.Share, errSubscribe chan error) {
 	selectedShares := strings.Split(r.cfg.TradingServiceShares, ",")
-
 	stream, err := r.client.Subscribe(ctx, &priceProtocol.SubscribeRequest{
 		SelectedShares: selectedShares,
 		UUID:           subID.String()})
 	if err != nil {
 		errSubscribe <- fmt.Errorf("PriceServiceRepository -> Subscribe -> %w", err)
 	}
-
 	for {
-		protoResponse, err := stream.Recv()
-
-		if err != nil {
-			errSubscribe <- fmt.Errorf("PriceServiceRepository -> Subscribe -> %w", err)
+		select {
+		case <-ctx.Done():
 			return
-		}
-		recievedShares := make([]*model.Share, 0)
+		default:
+			protoResponse, err := stream.Recv()
+			if err != nil {
+				errSubscribe <- fmt.Errorf("PriceServiceRepository -> Subscribe -> %w", err)
+				return
+			}
+			errSubscribe <- nil
 
-		for _, protoShare := range protoResponse.Shares {
-			recievedShares = append(recievedShares, &model.Share{Name: protoShare.Name, Price: protoShare.Price})
+			for _, protoShare := range protoResponse.Shares {
+				subscribersShares <- model.Share{Name: protoShare.Name, Price: protoShare.Price}
+			}
 		}
-
-		errSubscribe <- nil
-		subscribersShares <- recievedShares
 	}
 }

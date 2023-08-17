@@ -32,7 +32,8 @@ func (r *TradingServiceRepository) AddPosition(ctx context.Context, position *mo
 	_, err := r.pool.Exec(ctx, `INSERT INTO positions (positionid, profileid, vector, shareName, shareAmount, 
 		shareStartPrice, stopLoss, takeProfit, openedTime) 
 		VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		position.PositionID, position.ProfileID, position.Vector, position.ShareName, shareAmount, shareStartPrice, position.StopLoss, position.TakeProfit, time.Now().UTC())
+		position.PositionID, position.ProfileID, position.Vector, position.ShareName, shareAmount, shareStartPrice, position.StopLoss,
+		position.TakeProfit, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("TradingServiceRepository -> AddPosition -> %w", err)
 	}
@@ -41,7 +42,8 @@ func (r *TradingServiceRepository) AddPosition(ctx context.Context, position *mo
 
 // ClosePosition adds info about closed position to database
 func (r *TradingServiceRepository) ClosePosition(ctx context.Context, positionID uuid.UUID, shareEndPrice float64) error {
-	res, err := r.pool.Exec(ctx, "UPDATE positions SET shareEndPrice = $1, closedTime = $2 WHERE positionid = $3", shareEndPrice, time.Now().UTC(), positionID)
+	res, err := r.pool.Exec(ctx, "UPDATE positions SET shareEndPrice = $1, closedTime = $2 WHERE positionid = $3", shareEndPrice,
+		time.Now().UTC(), positionID)
 	if err != nil {
 		return fmt.Errorf("TradingServiceRepository -> ClosePosition -> %w", err)
 	}
@@ -54,7 +56,7 @@ func (r *TradingServiceRepository) ClosePosition(ctx context.Context, positionID
 // ReadShareNameByID reads from db name of share using by exact position
 func (r *TradingServiceRepository) ReadShareNameByID(ctx context.Context, positionID uuid.UUID) (string, error) {
 	var shareName string
-	err := r.pool.QueryRow(ctx, "SELECT shareName FROM positions WHERE positionID = $1", positionID).Scan(&shareName)
+	err := r.pool.QueryRow(ctx, "SELECT sharename FROM positions WHERE positionid = $1", positionID).Scan(&shareName)
 	if err != nil {
 		return "", fmt.Errorf("TradingServiceRepository -> ReadShareNameByID -> %w", err)
 	}

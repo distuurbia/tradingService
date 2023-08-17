@@ -34,35 +34,35 @@ func NewTradingServiceHandler(s TradingServiceService, validate *validator.Valid
 	return &TradingServiceHandler{s: s, validate: validate, cfg: cfg}
 }
 
-// ValidationID validate given in and parses it to uuid.UUID type
-func (h *TradingServiceHandler) ValidationID(ctx context.Context, id string) (uuid.UUID, error) {
+// validationID validate given in and parses it to uuid.UUID type
+func (h *TradingServiceHandler) validationID(ctx context.Context, id string) (uuid.UUID, error) {
 	err := h.validate.VarCtx(ctx, id, "required,uuid")
 	if err != nil {
-		logrus.Errorf("ValidationID -> %v", err)
+		logrus.Errorf("validationID -> %v", err)
 		return uuid.Nil, err
 	}
 
 	profileID, err := uuid.Parse(id)
 	if err != nil {
-		logrus.Errorf("ValidationID -> %v", err)
+		logrus.Errorf("validationID -> %v", err)
 		return uuid.Nil, err
 	}
 
 	if profileID == uuid.Nil {
-		logrus.Errorf("ValidationID -> error: failed to use uuid")
-		return uuid.Nil, fmt.Errorf("ValidationID -> error: failed to use uuid")
+		logrus.Errorf("validationID -> error: failed to use uuid")
+		return uuid.Nil, fmt.Errorf("validationID -> error: failed to use uuid")
 	}
 	return profileID, nil
 }
 
 // OpenPosition opens position by calling method service TradingServiceService OpenPosition
 func (h *TradingServiceHandler) OpenPosition(ctx context.Context, req *protocol.OpenPositionRequest) (*protocol.OpenPositionResponse, error) {
-	profileID, err := h.ValidationID(ctx, req.Position.ProfileID)
+	profileID, err := h.validationID(ctx, req.Position.ProfileID)
 	if err != nil {
 		logrus.Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
 		return &protocol.OpenPositionResponse{}, err
 	}
-	positionID, err := h.ValidationID(ctx, req.Position.PositionID)
+	positionID, err := h.validationID(ctx, req.Position.PositionID)
 	if err != nil {
 		logrus.Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
 		return &protocol.OpenPositionResponse{}, err
@@ -103,12 +103,12 @@ func (h *TradingServiceHandler) OpenPosition(ctx context.Context, req *protocol.
 
 // ClosePosition closes position by calling method service TradingServiceService ClosePosition
 func (h *TradingServiceHandler) ClosePosition(ctx context.Context, req *protocol.ClosePositionRequest) (*protocol.ClosePositionResponse, error) {
-	profileID, err := h.ValidationID(ctx, req.ProfileID)
+	profileID, err := h.validationID(ctx, req.ProfileID)
 	if err != nil {
 		logrus.Errorf("TradingServiceHandler -> ClosePosition -> %v", err)
 		return &protocol.ClosePositionResponse{}, err
 	}
-	positionID, err := h.ValidationID(ctx, req.PositionID)
+	positionID, err := h.validationID(ctx, req.PositionID)
 	if err != nil {
 		logrus.Errorf("TradingServiceHandler -> ClosePosition -> %v", err)
 		return &protocol.ClosePositionResponse{}, err

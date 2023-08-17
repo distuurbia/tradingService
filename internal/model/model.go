@@ -32,7 +32,7 @@ type ProfilesManager struct {
 	Profiles map[uuid.UUID][]string
 
 	// ProfilesShares contains ProfileID as a key and channel with slice of shares to deliver it
-	ProfilesShares map[uuid.UUID]chan []*Share
+	ProfilesShares map[uuid.UUID]chan Share
 
 	// SharesPositionsRead contains map with ProfileID as a key and map of share and its count as value, this structs see how many positions read exact share
 	SharesPositionsRead map[uuid.UUID]map[string]int
