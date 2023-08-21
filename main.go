@@ -80,7 +80,9 @@ func main() {
 	}
 	pool, errPgx := connectPostgres(&cfg)
 	if errPgx != nil {
-		logrus.Fatalf("main -> %v", errPgx)
+		logrus.WithFields(logrus.Fields{
+			"cfg.PostgresPath": cfg.PostgresPath,
+		}).Fatalf("main -> %v", errPgx)
 	}
 
 	priceServiceClient := priceProtocol.NewPriceServiceServiceClient(priceServiceConn)
@@ -98,7 +100,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go s.SendSharesToProfiles(ctx, len(strings.Split(cfg.TradingServiceShares, ",")))
-
+	go s.BackupAllOpenedPositions(ctx)
 	lis, err := net.Listen("tcp", "localhost:8086")
 	if err != nil {
 		logrus.Fatalf("main -> %v", err)

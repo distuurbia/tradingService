@@ -7,16 +7,14 @@ import (
 
 	"github.com/distuurbia/tradingService/internal/model"
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAddPosition(t *testing.T) {
 	shareStartPrice := float64(25)
-	decimalShareStartPrice := decimal.NewFromFloat(shareStartPrice)
-	decimalMoneyAmount := decimal.NewFromFloat(testPosition.MoneyAmount)
-	shareAmount := (decimalMoneyAmount.Div(decimalShareStartPrice)).InexactFloat64()
-	err := r.AddPosition(context.Background(), &testPosition, shareStartPrice)
+	shareAmount := float64(3)
+
+	err := r.AddPosition(context.Background(), &testPosition, shareAmount, shareStartPrice)
 	require.NoError(t, err)
 
 	var readPosition model.Position
@@ -43,9 +41,10 @@ func TestAddPosition(t *testing.T) {
 func TestClosePosition(t *testing.T) {
 	shareStartPrice := float64(25)
 	shareEndPrice := float64(30)
+	shareAmount := float64(3)
 	testPosition.PositionID = uuid.New()
 
-	err := r.AddPosition(context.Background(), &testPosition, shareStartPrice)
+	err := r.AddPosition(context.Background(), &testPosition, shareAmount, shareStartPrice)
 	require.NoError(t, err)
 	err = r.ClosePosition(context.Background(), testPosition.PositionID, shareEndPrice)
 	require.NoError(t, err)
@@ -60,15 +59,15 @@ func TestClosePosition(t *testing.T) {
 	require.NotEmpty(t, readClosedTime)
 }
 
-func TestReadShareNameByID(t *testing.T) {
-	shareStartPrice := float64(25)
-	testPosition.PositionID = uuid.New()
+// func TestReadShareNameByID(t *testing.T) {
+// 	shareStartPrice := float64(25)
+// 	testPosition.PositionID = uuid.New()
 
-	err := r.AddPosition(context.Background(), &testPosition, shareStartPrice)
-	require.NoError(t, err)
+// 	err := r.AddPosition(context.Background(), &testPosition, shareStartPrice)
+// 	require.NoError(t, err)
 
-	readShareName, err := r.ReadShareNameByID(context.Background(), testPosition.PositionID)
+// 	readShareName, err := r.ReadShareNameByID(context.Background(), testPosition.PositionID)
 
-	require.NoError(t, err)
-	require.Equal(t, testPosition.ShareName, readShareName)
-}
+// 	require.NoError(t, err)
+// 	require.Equal(t, testPosition.ShareName, readShareName)
+// }

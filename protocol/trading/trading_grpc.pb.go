@@ -24,7 +24,7 @@ const _ = grpc.SupportPackageIsVersion7
 type TradingServiceServiceClient interface {
 	OpenPosition(ctx context.Context, in *OpenPositionRequest, opts ...grpc.CallOption) (*OpenPositionResponse, error)
 	ClosePosition(ctx context.Context, in *ClosePositionRequest, opts ...grpc.CallOption) (*ClosePositionResponse, error)
-	CheckTradableShares(ctx context.Context, in *CheckTradableSharesRequest, opts ...grpc.CallOption) (*CheckTradableSharesResponse, error)
+	ReadAllOpenedPositionsByProfileID(ctx context.Context, in *ReadAllOpenedPositionsByProfileIDRequest, opts ...grpc.CallOption) (*ReadAllOpenedPositionsByProfileIDResponse, error)
 }
 
 type tradingServiceServiceClient struct {
@@ -53,9 +53,9 @@ func (c *tradingServiceServiceClient) ClosePosition(ctx context.Context, in *Clo
 	return out, nil
 }
 
-func (c *tradingServiceServiceClient) CheckTradableShares(ctx context.Context, in *CheckTradableSharesRequest, opts ...grpc.CallOption) (*CheckTradableSharesResponse, error) {
-	out := new(CheckTradableSharesResponse)
-	err := c.cc.Invoke(ctx, "/TradingServiceService/CheckTradableShares", in, out, opts...)
+func (c *tradingServiceServiceClient) ReadAllOpenedPositionsByProfileID(ctx context.Context, in *ReadAllOpenedPositionsByProfileIDRequest, opts ...grpc.CallOption) (*ReadAllOpenedPositionsByProfileIDResponse, error) {
+	out := new(ReadAllOpenedPositionsByProfileIDResponse)
+	err := c.cc.Invoke(ctx, "/TradingServiceService/ReadAllOpenedPositionsByProfileID", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (c *tradingServiceServiceClient) CheckTradableShares(ctx context.Context, i
 type TradingServiceServiceServer interface {
 	OpenPosition(context.Context, *OpenPositionRequest) (*OpenPositionResponse, error)
 	ClosePosition(context.Context, *ClosePositionRequest) (*ClosePositionResponse, error)
-	CheckTradableShares(context.Context, *CheckTradableSharesRequest) (*CheckTradableSharesResponse, error)
+	ReadAllOpenedPositionsByProfileID(context.Context, *ReadAllOpenedPositionsByProfileIDRequest) (*ReadAllOpenedPositionsByProfileIDResponse, error)
 	mustEmbedUnimplementedTradingServiceServiceServer()
 }
 
@@ -82,8 +82,8 @@ func (UnimplementedTradingServiceServiceServer) OpenPosition(context.Context, *O
 func (UnimplementedTradingServiceServiceServer) ClosePosition(context.Context, *ClosePositionRequest) (*ClosePositionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ClosePosition not implemented")
 }
-func (UnimplementedTradingServiceServiceServer) CheckTradableShares(context.Context, *CheckTradableSharesRequest) (*CheckTradableSharesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CheckTradableShares not implemented")
+func (UnimplementedTradingServiceServiceServer) ReadAllOpenedPositionsByProfileID(context.Context, *ReadAllOpenedPositionsByProfileIDRequest) (*ReadAllOpenedPositionsByProfileIDResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReadAllOpenedPositionsByProfileID not implemented")
 }
 func (UnimplementedTradingServiceServiceServer) mustEmbedUnimplementedTradingServiceServiceServer() {}
 
@@ -134,20 +134,20 @@ func _TradingServiceService_ClosePosition_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TradingServiceService_CheckTradableShares_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CheckTradableSharesRequest)
+func _TradingServiceService_ReadAllOpenedPositionsByProfileID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReadAllOpenedPositionsByProfileIDRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TradingServiceServiceServer).CheckTradableShares(ctx, in)
+		return srv.(TradingServiceServiceServer).ReadAllOpenedPositionsByProfileID(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/TradingServiceService/CheckTradableShares",
+		FullMethod: "/TradingServiceService/ReadAllOpenedPositionsByProfileID",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TradingServiceServiceServer).CheckTradableShares(ctx, req.(*CheckTradableSharesRequest))
+		return srv.(TradingServiceServiceServer).ReadAllOpenedPositionsByProfileID(ctx, req.(*ReadAllOpenedPositionsByProfileIDRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -168,8 +168,8 @@ var TradingServiceService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TradingServiceService_ClosePosition_Handler,
 		},
 		{
-			MethodName: "CheckTradableShares",
-			Handler:    _TradingServiceService_CheckTradableShares_Handler,
+			MethodName: "ReadAllOpenedPositionsByProfileID",
+			Handler:    _TradingServiceService_ReadAllOpenedPositionsByProfileID_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

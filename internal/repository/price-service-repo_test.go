@@ -55,7 +55,7 @@ func TestSubscribe(t *testing.T) {
 	select {
 	case firstShare := <-subscribersShares:
 		require.Equal(t, len(expectedShares), len(subscribersShares)+1)
-		
+
 		require.Equal(t, firstShare.Name, expectedShares[0].Name)
 		require.Equal(t, firstShare.Price, expectedShares[0].Price)
 

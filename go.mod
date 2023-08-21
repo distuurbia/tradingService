@@ -42,7 +42,7 @@ require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/distuurbia/PriceService v0.0.0-20230816082958-4e69f9225b86
 	github.com/distuurbia/balance v0.0.0-20230807090524-1b34aef416c7
-	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/golang/protobuf v1.5.3
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/shopspring/decimal v1.3.1
 	github.com/sirupsen/logrus v1.9.3

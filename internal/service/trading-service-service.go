@@ -30,9 +30,11 @@ type BalanceRepository interface {
 
 // TradingServiceRepository is an interface of repository TradingServiceRepository
 type TradingServiceRepository interface {
-	AddPosition(ctx context.Context, position *model.Position, shareStartPrice float64) error
+	AddPosition(ctx context.Context, position *model.Position, shareAmount, shareStartPrice float64) error
 	ClosePosition(ctx context.Context, positionID uuid.UUID, shareEndPrice float64) error
-	ReadShareNameByID(ctx context.Context, positionID uuid.UUID) (string, error)
+	ReadAllOpenedPositionsByProfileID(ctx context.Context, profileID uuid.UUID) ([]*model.OpenedPosition, error)
+	BackupAllOpenedPositions(ctx context.Context) ([]*model.Position, error)
+	ReadInfoAboutOpenedPosition(ctx context.Context, positionID uuid.UUID) (float64, float64, error)
 }
 
 // TradingServiceService is the struct that implements PriceServiceRepository and TradingServiceRepository interfaces,
@@ -77,7 +79,8 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context, length
 
 		err := <-errSubscribe
 		if err != nil {
-			logrus.Errorf("TradingServiceService -> SendSharesToProfiles -> %v", err)
+			logrus.WithField("length", length).Errorf("TradingServiceService -> SendSharesToProfiles -> %v", err)
+			return
 		}
 
 		for i := 0; i < cap(allShares); i++ {
@@ -87,7 +90,6 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context, length
 		s.profMngr.Mu.Lock()
 		for profileID, selcetedShares := range s.profMngr.Profiles {
 			if len(s.profMngr.ProfilesShares[profileID]) != 0 {
-				s.profMngr.Mu.Unlock()
 				continue
 			}
 			for _, selectedShare := range selcetedShares {
@@ -97,19 +99,20 @@ func (s *TradingServiceService) SendSharesToProfiles(ctx context.Context, length
 					return
 				case s.profMngr.ProfilesShares[profileID] <- model.Share{Name: selectedShare, Price: shares[selectedShare]}:
 					fmt.Println("INPUT: ", selectedShare, " ", shares[selectedShare])
-				}	
+				}
 			}
-			s.profMngr.Mu.Unlock()
 		}
-		
+		s.profMngr.Mu.Unlock()
 	}
 }
 
 // AddInfoToManager adds new profile to profMngr and if profile already exists just adds new selected share and increments SharesPositionsRead by profileID
-func (s *TradingServiceService) AddInfoToManager(ctx context.Context, profileID uuid.UUID, selectedShare string, amount float64) error {
-	err := s.balanceRps.WithdrawOnPosition(ctx, profileID.String(), amount)
-	if err != nil {
-		return fmt.Errorf("TradingServiceService -> AddInfoToManager -> %w", err)
+func (s *TradingServiceService) AddInfoToManager(ctx context.Context, profileID uuid.UUID, selectedShare string, amount float64, backup bool) error {
+	if !backup {
+		err := s.balanceRps.WithdrawOnPosition(ctx, profileID.String(), amount)
+		if err != nil {
+			return fmt.Errorf("TradingServiceService -> AddInfoToManager -> %w", err)
+		}
 	}
 
 	selectedShares := make([]string, 0)
@@ -137,7 +140,7 @@ func (s *TradingServiceService) AddInfoToManager(ctx context.Context, profileID 
 			s.profMngr.Mu.Unlock()
 		}
 		s.profMngr.Mu.Lock()
-		s.profMngr.ProfilesShares[profileID] = make(chan model.Share, cap(s.profMngr.ProfilesShares[profileID]) + 1)
+		s.profMngr.ProfilesShares[profileID] = make(chan model.Share, cap(s.profMngr.ProfilesShares[profileID])+1)
 		s.profMngr.Mu.Unlock()
 	}
 
@@ -180,36 +183,18 @@ func (s *TradingServiceService) CountPnl(vector string, shareAmount, shareStartP
 	return 0
 }
 
-// ClosePosition closes exact position and deletes everything related from all included structures in ProfileManager,
-// if profile don't have any opened positions, calls DeleteProfileAtAll method
-func (s *TradingServiceService) ClosePosition(ctx context.Context, profileID, positionID uuid.UUID) error {
-	// s.profMngr.Mu.RLock()
-	// _, ok := s.profMngr.Profiles[profileID]
-	// _, secOk := s.profMngr.SharesPositionsRead[profileID]
-	// s.profMngr.Mu.RUnlock()
-	// if !ok && secOk {
-	// 	return fmt.Errorf("TradingServiceService -> ClosePosition -> error: position in such profile doesn't exist")
-	// }
+// ClosePosition fills the initialized with position ID map PositionClose in profile manager with true value
+func (s *TradingServiceService) ClosePosition(positionID uuid.UUID) error {
+	s.profMngr.Mu.RLock()
+	if _, ok := s.profMngr.PositionClose[positionID]; !ok {
+		s.profMngr.Mu.RUnlock()
+		return fmt.Errorf("TradingServiceService -> ClosePosition -> error: position with such ID was never opened")
+	}
+	s.profMngr.Mu.RUnlock()
 
-	// shares := make(map[string]float64)
-	// share := model.Share{}
-	// s.profMngr.Mu.Lock()
-	// for i := 0; i < cap(s.profMngr.ProfilesShares[profileID]); i++ {
-	// 	share = <-s.profMngr.ProfilesShares[profileID]
-	// 	shares[share.Name] = share.Price
-	// }
-	// s.profMngr.Mu.Unlock()
-	// selectedShare, err := s.tradingRps.ReadShareNameByID(ctx, positionID)
-	// if err != nil {
-	// 	return fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
-	// }
-
-	// err = s.tradingRps.ClosePosition(ctx, positionID, shareEndPrice)
-	// if err != nil {
-	// 	return fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
-	// }
-
+	s.profMngr.Mu.Lock()
 	s.profMngr.PositionClose[positionID] <- true
+	s.profMngr.Mu.Unlock()
 	return nil
 }
 
@@ -233,7 +218,7 @@ func (s *TradingServiceService) CheckStopLossAndTakeProfit(position *model.Posit
 	share := model.Share{}
 	for {
 		s.profMngr.Mu.Lock()
-		if len(s.profMngr.ProfilesShares[position.ProfileID]) == 0 {
+		if len(s.profMngr.ProfilesShares[position.ProfileID]) != len(s.profMngr.Profiles[position.ProfileID]) {
 			s.profMngr.Mu.Unlock()
 			continue
 		}
@@ -243,7 +228,6 @@ func (s *TradingServiceService) CheckStopLossAndTakeProfit(position *model.Posit
 		}
 		s.profMngr.Mu.Unlock()
 		for key, value := range shares {
-			
 			if position.ShareName != key {
 				continue
 			}
@@ -264,6 +248,7 @@ func (s *TradingServiceService) CheckStopLossAndTakeProfit(position *model.Posit
 // garbageCleanAfterPosition delete from profile manager info that was used by exact position
 func (s *TradingServiceService) garbageCleanAfterPosition(position *model.Position) {
 	s.profMngr.Mu.Lock()
+	s.profMngr.SharesPositionsRead[position.ProfileID][position.ShareName]--
 	if s.profMngr.SharesPositionsRead[position.ProfileID][position.ShareName] == 0 {
 		delete(s.profMngr.SharesPositionsRead[position.ProfileID], position.ShareName)
 		for i, share := range s.profMngr.Profiles[position.ProfileID] {
@@ -280,116 +265,140 @@ func (s *TradingServiceService) garbageCleanAfterPosition(position *model.Positi
 		s.profMngr.Mu.Lock()
 		close(s.profMngr.ProfilesShares[position.ProfileID])
 		delete(s.profMngr.ProfilesShares, position.PositionID)
-		s.profMngr.ProfilesShares[position.ProfileID] = make(chan model.Share, cap(s.profMngr.ProfilesShares[position.ProfileID]) - 1)	
+		s.profMngr.ProfilesShares[position.ProfileID] = make(chan model.Share, cap(s.profMngr.ProfilesShares[position.ProfileID])-1)
 		s.profMngr.Mu.Unlock()
 	}
 
 	s.profMngr.Mu.Lock()
 	close(s.profMngr.PositionClose[position.PositionID])
 	delete(s.profMngr.PositionClose, position.PositionID)
-	s.profMngr.Mu.Unlock()	
+	s.profMngr.Mu.Unlock()
 }
 
-// OpenPosition calls method AddPosition from TradingServiceRepository and wait till the end of position to return the its pnl
-func (s *TradingServiceService) OpenPosition(ctx context.Context, position *model.Position) (float64, error) {
+// BackupAllOpenedPositions adds info to manager about all positions that wasn't be closed and calls the method OpenPosition to each one
+func (s *TradingServiceService) BackupAllOpenedPositions(ctx context.Context) {
+	openedPositions, err := s.tradingRps.BackupAllOpenedPositions(ctx)
+	if err != nil {
+		logrus.Errorf("TradingServiceService -> BackupAllOpenedPositions -> %v", err)
+	}
+	for _, position := range openedPositions {
+		err := s.AddInfoToManager(ctx, position.ProfileID, position.ShareName, position.MoneyAmount, true)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"position.ProfileID":   position.ProfileID,
+				"position.ShareName":   position.ShareName,
+				"position.MoneyAmount": position.MoneyAmount,
+			}).Errorf("TradingServiceService -> BackupAllOpenedPositions -> %v", err)
+		}
+		go func(position *model.Position) {
+			_, err := s.OpenPosition(ctx, position, true)
+			logrus.WithFields(logrus.Fields{
+				"position": position,
+				"backup":   true,
+			}).Errorf("TradingServiceService -> BackupAllOpenedPositions -> %v", err)
+		}(position)
+	}
+}
+
+// takeActualShares takes actual shares and theirs prices for an exact profileID and return it in map of share names as a key and prices as value
+func (s *TradingServiceService) takeActualShares(profileID uuid.UUID) map[string]float64 {
 	shares := make(map[string]float64)
-	share := model.Share{}
-	
+
 	for {
 		s.profMngr.Mu.Lock()
-		if len(s.profMngr.ProfilesShares[position.ProfileID]) != len(s.profMngr.Profiles[position.ProfileID]){
+
+		if len(s.profMngr.ProfilesShares[profileID]) != len(s.profMngr.Profiles[profileID]) {
 			s.profMngr.Mu.Unlock()
 			continue
 		}
-		select {
-		case share = <-s.profMngr.ProfilesShares[position.ProfileID]:
-			
+
+		share := <-s.profMngr.ProfilesShares[profileID]
+
+		shares[share.Name] = share.Price
+		for i := 1; i < cap(s.profMngr.ProfilesShares[profileID]); i++ {
+			share = <-s.profMngr.ProfilesShares[profileID]
 			shares[share.Name] = share.Price
-			for i := 1; i < cap(s.profMngr.ProfilesShares[position.ProfileID]); i++ {
-				share = <-s.profMngr.ProfilesShares[position.ProfileID]
-				shares[share.Name] = share.Price
-			}
 		}
+
 		s.profMngr.Mu.Unlock()
+
 		break
 	}
 
-	var shareAmount float64
-	var pnl float64
-	var moneyBack decimal.Decimal
-	moneyAmountDecimal := decimal.NewFromFloat(position.MoneyAmount)
+	return shares
+}
 
-	shareStartPrice := shares[position.ShareName]
-	shareStartPriceDecimal := decimal.NewFromFloat(shareStartPrice)
-	shareAmount = moneyAmountDecimal.Div(shareStartPriceDecimal).InexactFloat64()
-	
-	err := s.tradingRps.AddPosition(ctx, position, shareStartPrice)
-	if err != nil {
-		return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
+// OpenPosition calls method AddPosition from TradingServiceRepository and wait till the end of position to return the its pnl
+func (s *TradingServiceService) OpenPosition(ctx context.Context, position *model.Position, backup bool) (float64, error) {
+	moneyAmountDecimal := decimal.NewFromFloat(position.MoneyAmount)
+	var pnl float64
+	var shareStartPrice float64
+	var shareAmount float64
+	var moneyBack decimal.Decimal
+	var err error
+
+	if !backup {
+		shares := s.takeActualShares(position.ProfileID)
+
+		shareStartPrice = shares[position.ShareName]
+		shareStartPriceDecimal := decimal.NewFromFloat(shareStartPrice)
+		shareAmount = moneyAmountDecimal.Div(shareStartPriceDecimal).InexactFloat64()
+
+		err = s.tradingRps.AddPosition(ctx, position, shareAmount, shareStartPrice)
+		if err != nil {
+			return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
+		}
+	} else {
+		shareStartPrice, shareAmount, err = s.tradingRps.ReadInfoAboutOpenedPosition(ctx, position.PositionID)
+		if err != nil {
+			return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> %w", err)
+		}
 	}
 
 	outOfPosition := make(chan bool, 1)
 	s.profMngr.PositionClose[position.PositionID] = make(chan bool, 1)
 	go s.CheckStopLossAndTakeProfit(position, outOfPosition)
-
+	shares := make(map[string]float64)
 	select {
 	case <-s.profMngr.PositionClose[position.PositionID]:
 		outOfPosition <- true
-		for { 
+		for {
 			s.profMngr.Mu.Lock()
 			if len(s.profMngr.ProfilesShares[position.ProfileID]) != len(s.profMngr.Profiles[position.ProfileID]) {
 				s.profMngr.Mu.Unlock()
 				continue
 			}
 			for i := 0; i < cap(s.profMngr.ProfilesShares[position.ProfileID]); i++ {
-				share = <-s.profMngr.ProfilesShares[position.ProfileID]
+				share := <-s.profMngr.ProfilesShares[position.ProfileID]
 				shares[share.Name] = share.Price
 			}
 			s.profMngr.Mu.Unlock()
-	
-			if _, ok := shares[position.ShareName]; !ok {
-				return 0, fmt.Errorf("TradingServiceService -> OpenPosition -> error: position on such share doesn't exist")
-			}
-	
-			shareEndPrice := shares[position.ShareName]
-			err = s.tradingRps.ClosePosition(ctx, position.PositionID, shareEndPrice)
-			if err != nil {
-				return 0, fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
-			}
-	
-			s.profMngr.SharesPositionsRead[position.ProfileID][position.ShareName]--
-			
-			pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, shares[position.ShareName])
-	
-			pnlDecimal := decimal.NewFromFloat(pnl)
-			moneyBack = pnlDecimal.Add(moneyAmountDecimal)
 			break
 		}
 
 	case <-outOfPosition:
 		s.profMngr.Mu.Lock()
 		for i := 0; i < cap(s.profMngr.ProfilesShares[position.ProfileID]); i++ {
-			share = <-s.profMngr.ProfilesShares[position.ProfileID]
+			share := <-s.profMngr.ProfilesShares[position.ProfileID]
 			shares[share.Name] = share.Price
 		}
 		s.profMngr.Mu.Unlock()
-
-		if _, ok := shares[position.ShareName]; !ok {
-			return 0, fmt.Errorf("TradingServiceService -> ClosePosition -> error: position on such share doesn't exist")
-		}
-		shareEndPrice := shares[position.ShareName]
-		err = s.tradingRps.ClosePosition(ctx, position.PositionID, shareEndPrice)
-		if err != nil {
-			return 0, fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
-		}
-
-		s.profMngr.SharesPositionsRead[position.ProfileID][position.ShareName]--
-
-		pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, shares[position.ShareName])
-
-		pnlDecimal := decimal.NewFromFloat(pnl)
-		moneyBack = pnlDecimal.Add(moneyAmountDecimal)
 	}
+
+	if _, ok := shares[position.ShareName]; !ok {
+		return 0, fmt.Errorf("TradingServiceService -> ClosePosition -> error: position on such share doesn't exist")
+	}
+
+	shareEndPrice := shares[position.ShareName]
+	err = s.tradingRps.ClosePosition(ctx, position.PositionID, shareEndPrice)
+	if err != nil {
+		return 0, fmt.Errorf("TradingServiceService -> ClosePosition -> %w", err)
+	}
+
+	pnl = s.CountPnl(position.Vector, shareAmount, shareStartPrice, shareEndPrice)
+
+	pnlDecimal := decimal.NewFromFloat(pnl)
+	moneyBack = pnlDecimal.Add(moneyAmountDecimal)
 
 	s.garbageCleanAfterPosition(position)
 
@@ -399,4 +408,9 @@ func (s *TradingServiceService) OpenPosition(ctx context.Context, position *mode
 	}
 
 	return pnl, nil
+}
+
+// ReadAllOpenedPositionsByProfileID calls similar method of trading service repository and returnes slice higher to handler
+func (s *TradingServiceService) ReadAllOpenedPositionsByProfileID(ctx context.Context, profileID uuid.UUID) ([]*model.OpenedPosition, error) {
+	return s.tradingRps.ReadAllOpenedPositionsByProfileID(ctx, profileID)
 }

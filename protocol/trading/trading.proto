@@ -2,10 +2,12 @@ syntax = "proto3";
 
 option go_package = "github.com/distuurbia/tradingService/protocol/trading";
 
+import "google/protobuf/timestamp.proto";
+
 service TradingServiceService {
     rpc OpenPosition(OpenPositionRequest) returns (OpenPositionResponse) {}
     rpc ClosePosition(ClosePositionRequest) returns (ClosePositionResponse) {}
-    rpc CheckTradableShares(CheckTradableSharesRequest) returns (CheckTradableSharesResponse) {}
+    rpc ReadAllOpenedPositionsByProfileID(ReadAllOpenedPositionsByProfileIDRequest) returns (ReadAllOpenedPositionsByProfileIDResponse) {}
 }
 
 message Position {
@@ -18,6 +20,21 @@ message Position {
     string shareName = 7;
 }
 
+message OpenedPosition {
+    double shareStartPrice = 1;
+    double shareAmount = 2;
+    google.protobuf.Timestamp openedTime = 3;
+    Position position = 4;
+}
+
+message ReadAllOpenedPositionsByProfileIDRequest {
+    string profileID = 1;
+}
+
+message ReadAllOpenedPositionsByProfileIDResponse {
+    repeated OpenedPosition openedPositions = 1;
+}
+
 message OpenPositionRequest {
     Position position = 1;
 }
@@ -26,13 +43,6 @@ message OpenPositionResponse {
 }
 
 message ClosePositionRequest {
-    string profileID = 1;
-    string positionID = 2;
+    string positionID = 1;
 }
 message ClosePositionResponse {}
-
-message CheckTradableSharesResponse {
-    string tradableShares = 1;
-}
-
-message CheckTradableSharesRequest {}

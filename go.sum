@@ -13,8 +13,6 @@ github.com/containerd/continuity v0.4.1/go.mod h1:F6PTNCKepoxEaXLQp3wDAjygEnImnZ
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/distuurbia/PriceService v0.0.0-20230808093608-360d463e3aca h1:HQtBVRXDoUBi9H/4eEebhXeA4/pbLZNLdoIHKR+Ij+o=
-github.com/distuurbia/PriceService v0.0.0-20230808093608-360d463e3aca/go.mod h1:gsnY4UvEL185mVCqT5jEkRIUJhLVcn8RUuzCAZ0pkAk=
 github.com/distuurbia/PriceService v0.0.0-20230816082958-4e69f9225b86 h1:L+QBVxKx6DQyi72JIXqso90zoC8D5mC8UejNw+tH508=
 github.com/distuurbia/PriceService v0.0.0-20230816082958-4e69f9225b86/go.mod h1:gsnY4UvEL185mVCqT5jEkRIUJhLVcn8RUuzCAZ0pkAk=
 github.com/distuurbia/balance v0.0.0-20230807090524-1b34aef416c7 h1:YsbcymhNxze8wRH8PX0I0DYyeY4+n8XIuxF2MWud5Yg=

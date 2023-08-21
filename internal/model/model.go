@@ -3,6 +3,7 @@ package model
 
 import (
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -22,6 +23,14 @@ type Position struct {
 	PositionID  uuid.UUID
 	ShareName   string `validate:"required,min=1"`
 	Vector      string `validate:"oneof=long short"`
+}
+
+// OpenedPosition contains position struct and an additional fields that were created while transaction usually opens
+type OpenedPosition struct {
+	ShareStartPrice float64
+	ShareAmount     float64
+	OpenedTime      time.Time
+	Position
 }
 
 // ProfilesManager is an assistent for managing all opened positions by profiles
