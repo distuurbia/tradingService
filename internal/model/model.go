@@ -22,12 +22,14 @@ type Position struct {
 	ProfileID   uuid.UUID
 	PositionID  uuid.UUID
 	ShareName   string `validate:"required,min=1"`
-	Vector      string `validate:"oneof=long short"`
+	ShortOrLong string `validate:"oneof=long short"`
+	Close       chan bool
 }
 
 // OpenedPosition contains position struct and an additional fields that were created while transaction usually opens
 type OpenedPosition struct {
 	ShareStartPrice float64
+	ShareEndPrice   float64
 	ShareAmount     float64
 	OpenedTime      time.Time
 	Position
@@ -35,17 +37,7 @@ type OpenedPosition struct {
 
 // ProfilesManager is an assistent for managing all opened positions by profiles
 type ProfilesManager struct {
-	Mu sync.RWMutex
-
-	// Profiles contains ProfileID as a key and slice of selected shares as value
-	Profiles map[uuid.UUID][]string
-
-	// ProfilesShares contains ProfileID as a key and channel with slice of shares to deliver it
-	ProfilesShares map[uuid.UUID]chan Share
-
-	// SharesPositionsRead contains map with ProfileID as a key and map of share and its count as value, this structs see how many positions read exact share
-	SharesPositionsRead map[uuid.UUID]map[string]int
-
-	// PositionClose contains map with PositionID as a value and bool channel as a value, when position closing field by PositionID gets true value in the chan
-	PositionClose map[uuid.UUID]chan bool
+	Mu       sync.RWMutex
+	Shares   map[string]float64
+	Profiles map[uuid.UUID]map[uuid.UUID]OpenedPosition
 }

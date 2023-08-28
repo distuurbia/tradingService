@@ -5,7 +5,7 @@ option go_package = "github.com/distuurbia/tradingService/protocol/trading";
 import "google/protobuf/timestamp.proto";
 
 service TradingServiceService {
-    rpc OpenPosition(OpenPositionRequest) returns (OpenPositionResponse) {}
+    rpc AddPosition(AddPositionRequest) returns (AddPositionResponse) {}
     rpc ClosePosition(ClosePositionRequest) returns (ClosePositionResponse) {}
     rpc ReadAllOpenedPositionsByProfileID(ReadAllOpenedPositionsByProfileIDRequest) returns (ReadAllOpenedPositionsByProfileIDResponse) {}
 }
@@ -16,7 +16,7 @@ message Position {
     double takeProfit = 3;
     string profileID = 4;
     string positionID = 5;
-    string vector = 6;
+    string shortOrLong = 6;
     string shareName = 7;
 }
 
@@ -35,14 +35,15 @@ message ReadAllOpenedPositionsByProfileIDResponse {
     repeated OpenedPosition openedPositions = 1;
 }
 
-message OpenPositionRequest {
+message AddPositionRequest {
     Position position = 1;
 }
-message OpenPositionResponse {
-    double pnl = 1;
-}
+message AddPositionResponse {}
 
 message ClosePositionRequest {
     string positionID = 1;
+    string profileID = 2;
 }
-message ClosePositionResponse {}
+message ClosePositionResponse {
+    double pnl = 1;
+}

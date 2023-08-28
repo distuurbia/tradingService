@@ -30,7 +30,7 @@ var (
 		StopLoss:    10,
 		TakeProfit:  200,
 		ShareName:   "Apple",
-		Vector:      "long",
+		ShortOrLong: "long",
 	}
 )
 

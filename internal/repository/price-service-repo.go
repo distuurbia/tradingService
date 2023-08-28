@@ -23,7 +23,7 @@ func NewPriceServiceRepository(client priceProtocol.PriceServiceServiceClient, c
 	return &PriceServiceRepository{client: client, cfg: cfg}
 }
 
-// Subscribe receive data from grpc stream and fills the given channel
+// Subscribe receives the data from grpc stream and fills the given channel
 func (r *PriceServiceRepository) Subscribe(ctx context.Context, subID uuid.UUID, subscribersShares chan model.Share, errSubscribe chan error) {
 	selectedShares := strings.Split(r.cfg.TradingServiceShares, ",")
 	stream, err := r.client.Subscribe(ctx, &priceProtocol.SubscribeRequest{

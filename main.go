@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/caarlos0/env"
 	priceProtocol "github.com/distuurbia/PriceService/protocol/price"
@@ -14,6 +15,7 @@ import (
 	"github.com/distuurbia/tradingService/internal/handler"
 	protocol "github.com/distuurbia/tradingService/protocol/trading"
 	"github.com/go-playground/validator"
+	"github.com/lib/pq"
 
 	"github.com/distuurbia/tradingService/internal/repository"
 	"github.com/distuurbia/tradingService/internal/service"
@@ -101,6 +103,21 @@ func main() {
 	defer cancel()
 	go s.SendSharesToProfiles(ctx, len(strings.Split(cfg.TradingServiceShares, ",")))
 	go s.BackupAllOpenedPositions(ctx)
+
+	reportProblem := func(ev pq.ListenerEventType, err error) {
+		if err != nil {
+			logrus.Errorf("main -> %v", err)
+		}
+	}
+	var conninfo = cfg.PostgresPath + "?sslmode=disable"
+	const minReconnectDuration = 10
+	listener := pq.NewListener(conninfo, minReconnectDuration*time.Second, time.Minute, reportProblem)
+	err = listener.Listen("events")
+	if err != nil {
+		logrus.Fatalf("main -> %v", err)
+	}
+
+	go s.WaitingForNotification(ctx, listener)
 	lis, err := net.Listen("tcp", "localhost:8086")
 	if err != nil {
 		logrus.Fatalf("main -> %v", err)

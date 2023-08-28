@@ -15,15 +15,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TradingServiceService is an interface of service TradingServiceService
+// TradingServiceService is an interface of the service TradingServiceService
 type TradingServiceService interface {
-	AddInfoToManager(ctx context.Context, profileID uuid.UUID, selectedShare string, amount float64, backup bool) error
-	OpenPosition(ctx context.Context, position *model.Position, backup bool) (float64, error)
+	AddPosition(ctx context.Context, position *model.Position) error
+	ClosePosition(ctx context.Context, profileID, positionID uuid.UUID) (float64, error)
 	ReadAllOpenedPositionsByProfileID(ctx context.Context, profileID uuid.UUID) ([]*model.OpenedPosition, error)
-	ClosePosition(positionID uuid.UUID) error
 }
 
-// TradingServiceHandler is an object that implement TradingServiceService and also contains an object of type *validator.Validate
+// TradingServiceHandler implements the  TradingServiceService interface also contains an object of type *validator.Validate and *config.Config
 type TradingServiceHandler struct {
 	s        TradingServiceService
 	validate *validator.Validate
@@ -36,7 +35,7 @@ func NewTradingServiceHandler(s TradingServiceService, validate *validator.Valid
 	return &TradingServiceHandler{s: s, validate: validate, cfg: cfg}
 }
 
-// validationID validate given in and parses it to uuid.UUID type
+// validationID validates given id and parses it to uuid.UUID type
 func (h *TradingServiceHandler) validationID(ctx context.Context, id string) (uuid.UUID, error) {
 	err := h.validate.VarCtx(ctx, id, "required,uuid")
 	if err != nil {
@@ -54,17 +53,17 @@ func (h *TradingServiceHandler) validationID(ctx context.Context, id string) (uu
 	return profileID, nil
 }
 
-// OpenPosition opens position by calling method service TradingServiceService OpenPosition
-func (h *TradingServiceHandler) OpenPosition(ctx context.Context, req *protocol.OpenPositionRequest) (*protocol.OpenPositionResponse, error) {
+// AddPosition opens position by calling method AddPosition of service TradingServiceService
+func (h *TradingServiceHandler) AddPosition(ctx context.Context, req *protocol.AddPositionRequest) (*protocol.AddPositionResponse, error) {
 	profileID, err := h.validationID(ctx, req.Position.ProfileID)
 	if err != nil {
-		logrus.WithField("req.Position.ProfileID", req.Position.ProfileID).Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
-		return &protocol.OpenPositionResponse{}, err
+		logrus.WithField("req.Position.ProfileID", req.Position.ProfileID).Errorf("TradingServiceHandler -> AddPosition -> %v", err)
+		return &protocol.AddPositionResponse{}, err
 	}
 	positionID, err := h.validationID(ctx, req.Position.PositionID)
 	if err != nil {
-		logrus.WithField("req.Position.PositionID", req.Position.PositionID).Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
-		return &protocol.OpenPositionResponse{}, err
+		logrus.WithField("req.Position.PositionID", req.Position.PositionID).Errorf("TradingServiceHandler -> AddPosition -> %v", err)
+		return &protocol.AddPositionResponse{}, err
 	}
 	position := model.Position{
 		ProfileID:   profileID,
@@ -73,58 +72,51 @@ func (h *TradingServiceHandler) OpenPosition(ctx context.Context, req *protocol.
 		TakeProfit:  req.Position.TakeProfit,
 		MoneyAmount: req.Position.MoneyAmount,
 		ShareName:   req.Position.ShareName,
-		Vector:      req.Position.Vector,
+		ShortOrLong: req.Position.ShortOrLong,
 	}
 	err = h.validate.StructCtx(ctx, position)
 	if err != nil {
-		logrus.WithField("position", position).Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
-		return &protocol.OpenPositionResponse{}, err
+		logrus.WithField("position", position).Errorf("TradingServiceHandler -> AddPosition -> %v", err)
+		return &protocol.AddPositionResponse{}, err
 	}
 
 	if !strings.Contains(h.cfg.TradingServiceShares, position.ShareName) {
 		logrus.WithFields(logrus.Fields{
 			"h.cfg.TradingServiceShares": h.cfg.TradingServiceShares,
 			"position.ShareName":         position.ShareName,
-		}).Errorf("TradingServiceHandler -> OpenPosition -> error: such share doesn't exist")
-		return &protocol.OpenPositionResponse{}, fmt.Errorf("TradingServiceHandler -> OpenPosition -> error: such share doesn't exist")
+		}).Errorf("TradingServiceHandler -> AddPosition -> error: such share doesn't exist")
+		return &protocol.AddPositionResponse{}, fmt.Errorf("TradingServiceHandler -> AddPosition -> error: such share doesn't exist")
 	}
 
-	err = h.s.AddInfoToManager(ctx, position.ProfileID, position.ShareName, position.MoneyAmount, false)
+	err = h.s.AddPosition(ctx, &position)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"position.ProfileID":   position.ProfileID,
-			"position.ShareName":   position.ShareName,
-			"position.MoneyAmount": position.MoneyAmount,
-			"backup":               false,
-		}).Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
-		return &protocol.OpenPositionResponse{}, err
+		logrus.WithField("position", position).Errorf("TradingServiceHandler -> AddPosition -> %v", err)
+		return &protocol.AddPositionResponse{}, err
 	}
 
-	pnl, err := h.s.OpenPosition(ctx, &position, false)
-	if err != nil {
-		logrus.WithFields(logrus.Fields{
-			"position": position,
-			"backup":   false,
-		}).Errorf("TradingServiceHandler -> OpenPosition -> %v", err)
-		return &protocol.OpenPositionResponse{}, err
-	}
-	return &protocol.OpenPositionResponse{Pnl: pnl}, nil
+	return &protocol.AddPositionResponse{}, nil
 }
 
 // ClosePosition closes position by calling method service TradingServiceService ClosePosition
 func (h *TradingServiceHandler) ClosePosition(ctx context.Context, req *protocol.ClosePositionRequest) (*protocol.ClosePositionResponse, error) {
+	profileID, err := h.validationID(ctx, req.ProfileID)
+	if err != nil {
+		logrus.WithField("req.PositionID", req.PositionID).Errorf("TradingServiceHandler -> ClosePosition -> %v", err)
+		return &protocol.ClosePositionResponse{}, err
+	}
+
 	positionID, err := h.validationID(ctx, req.PositionID)
 	if err != nil {
 		logrus.WithField("req.PositionID", req.PositionID).Errorf("TradingServiceHandler -> ClosePosition -> %v", err)
 		return &protocol.ClosePositionResponse{}, err
 	}
 
-	err = h.s.ClosePosition(positionID)
+	pnl, err := h.s.ClosePosition(ctx, profileID, positionID)
 	if err != nil {
 		logrus.WithField("positionID", positionID).Errorf("TradingServiceHandler -> ClosePosition -> %v", err)
 		return &protocol.ClosePositionResponse{}, err
 	}
-	return &protocol.ClosePositionResponse{}, nil
+	return &protocol.ClosePositionResponse{Pnl: pnl}, nil
 }
 
 // ReadAllOpenedPositionsByProfileID returnes info about all positions that wasn't be closed by exact profile
@@ -148,7 +140,7 @@ func (h *TradingServiceHandler) ReadAllOpenedPositionsByProfileID(ctx context.Co
 				PositionID:  openedPosition.PositionID.String(),
 				TakeProfit:  openedPosition.TakeProfit,
 				StopLoss:    openedPosition.StopLoss,
-				Vector:      openedPosition.Vector,
+				ShortOrLong: openedPosition.ShortOrLong,
 				ShareName:   openedPosition.ShareName,
 				MoneyAmount: openedPosition.MoneyAmount,
 			},

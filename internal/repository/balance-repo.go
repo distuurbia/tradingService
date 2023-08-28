@@ -19,7 +19,7 @@ func NewBalanceRepository(client balanceProtocol.BalanceServiceClient) *BalanceR
 	return &BalanceRepository{client: client}
 }
 
-// WithdrawOnPosition takes money from balance of exact profile until the position is closed
+// WithdrawOnPosition takes the money from balance of an exact profile until the position is closed
 func (r *BalanceRepository) WithdrawOnPosition(ctx context.Context, profileID string, amount float64) error {
 	getBalanceResponse, err := r.client.GetBalance(ctx, &balanceProtocol.GetBalanceRequest{ProfileID: profileID})
 	if err != nil {
@@ -38,7 +38,7 @@ func (r *BalanceRepository) WithdrawOnPosition(ctx context.Context, profileID st
 	return nil
 }
 
-// MoneyBackWithPnl returnes money to balance of exact profile when the position is closed
+// MoneyBackWithPnl returnes the money to balance of an exact profile when the position is closed
 func (r *BalanceRepository) MoneyBackWithPnl(ctx context.Context, profileID string, moneyBack float64) error {
 	_, err := r.client.AddBalanceChange(ctx, &balanceProtocol.AddBalanceChangeRequest{ProfileID: profileID, Amount: moneyBack})
 	if err != nil {

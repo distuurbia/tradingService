@@ -2,7 +2,7 @@
 create table positions (
 	positionid uuid,
 	profileid uuid,
-	vector VARCHAR,
+	shortOrLong VARCHAR,
 	shareName VARCHAR,
 	shareAmount double precision,
 	shareStartPrice double precision,
